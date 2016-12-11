@@ -2,9 +2,9 @@ from collections import defaultdict
 from itertools import combinations, permutations
 from copy import deepcopy
 import os
+from pymongo import MongoClient
 
 clear = lambda: os.system('cls')
-visited = defaultdict(int)
 
 
 class Factory:
@@ -45,18 +45,19 @@ def are_empty_below(state, flr_num):
     return all([sum(state[x]) == 0 for x in range(0, flr_num)])
 
 
-def check_visited(visited, state):
+def check_visited(collection, state):
     ele = state[-1]
     flrs = state[:-1]
     splits = [flrs[x:x+int(len(flrs)/4)] for x in range(0,len(flrs),int(len(flrs)/4))]
     perms = list(permutations(splits[:-1]))
     for x in perms:
         tmp = "".join(x)+splits[-1]+ele
-        if visited[tmp] > 0: return True
+        if collection.find({'key': tmp}).limit(1).count() > 0:
+            return True
     return False
 
 
-def generate_successor_factories(fac, visited):
+def generate_successor_factories(fac, collection):
     generated = []
 
     ele_moves = [x for x in range(-1,2,2) if fac.grd_f <= fac.elevator + x <= fac.top_f]
@@ -80,8 +81,8 @@ def generate_successor_factories(fac, visited):
                     crr_state[fac.elevator][itm] = 0
                 if not check_fried(crr_state):
                     f = Factory(fac.sol_depth+1,fac.elevator + e_m,crr_state)
-                    if not check_visited(visited,f.state_to_string()):
-                        visited[f.state_to_string()] = 1
+                    if not check_visited(collection,f.state_to_string()):
+                        collection.insert_one({'key': f.state_to_string()})
                         generated.append(f)
 
     return generated
@@ -105,7 +106,10 @@ if __name__ == '__main__':
     counter = 0
     to_check = []
 
-    visited[crr.state_to_string()] = 1
+    client = MongoClient('localhost', 27017)
+    collection = client.advent.eleven
+
+    collection.insert_one({'key': crr.state_to_string()})
 
     while not crr.check_final():
         counter += 1
@@ -113,5 +117,5 @@ if __name__ == '__main__':
             depth = crr.sol_depth
             print("Exploring solutions on depth {0}, checked {1} states"
                   ", still need to check at least {2} states.".format(depth,counter, len(to_check)))
-        to_check += generate_successor_factories(crr, visited)
+        to_check += generate_successor_factories(crr, collection)
         crr = to_check.pop(0)
